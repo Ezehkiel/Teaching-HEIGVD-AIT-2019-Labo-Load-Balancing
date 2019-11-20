@@ -1,279 +1,146 @@
-title: Lab 03 - Load balancing
----
-
-## Lab 03 - Load balancing
-
-
-#### Pedagogical objectives
-
-* Deploy a web application in a two-tier architecture for scalability
-
-* Configure a load balancer
-
-* Performance-test a load-balanced web application
-
-In this lab you will perform a number of tasks and document your
-progress in a lab report. Each task specifies one or more deliverables
-to be produced.  Collect all the deliverables in your lab report. Give
-the lab report a structure that mimics the structure of this document.
-
-**Remark**:
-
-  - Use the Task numbers and question numbers in reference in your report.
-
-  - The version of HAProxy used in this lab is `1.5`. When reading the doc, take care to read the doc corresponding to this version. Here is the link: http://cbonte.github.io/haproxy-dconv/configuration-1.5.html
-
-  - During the lab, you will have to modify and play a bit with the [haproxy.cfg](ha/config/haproxy.cfg) file. You will find all the reference links to the official documentation inlined in the file.
+Lab 03 - Load balancing
 
 ### Task 1: Install the tools
-
-In this part you will install the base tools you need to do the
-different tasks of this lab.
-
-Install on your local machine Docker to create containers and install Docker-compose to your running multi-container. We provide all the Dockerfiles. Install also JMeter for load testing web applications:
-
-* [Docker](https://www.docker.com/)
-* [Docker compose](https://docs.docker.com/compose/)
-* [JMeter](http://jmeter.apache.org/)
-
-Clone the following repository to your machine:
-
-https://github.com/SoftEng-HEIGVD/Teaching-HEIGVD-AIT-2019-Labo-Load-Balancing.git
-
-Normally your folder should look like this :
-
-```
-Teaching-HEIGVD-AIT-2019-Labo-02/
-├── assets/
-│   └── ...
-|
-├── ha/
-│   ├── config/
-|   |   ├── haproxy.cfg
-|   |   └── rsyslogd.cfg
-|   |
-│   ├── scripts/
-|   |   ├── run-deamon.sh
-|   |   └── run.sh
-|   └── Dockerfile
-|  
-├── webapp/
-|   ├── app/
-|   │   └── ...
-|   ├── run.sh
-|   └── Dockerfile
-|
-├── docker-compose.yml
-├── Docker quick reference.md
-├── README.md
-├── .env
-└── tester.jmx
-```
-
-
-
-We gonna creates three docker containers. One contains HAProxy, the other two contain each a sample
-web application.
-
-The containers with the web application stand for two web servers that
-are load-balanced by HAProxy.
-
-To create the containers we use docker-compose. Execute this command on the main folder
-
-`$ docker-compose up --build`
-
-You should see output similar to the following:
-
-```bash
-Creating network "teaching-heigvd-ait-2019-labo-load-balancing_public_net" with driver "bridge"
-Building webapp1
-Step 1/9 : FROM node:latest
- ---> d8c33ae35f44
-Step 2/9 : MAINTAINER Laurent Prevost <laurent.prevost@heig-vd.ch>
- ---> Using cache
- ---> 0f0e5f2e0432
-Step 3/9 : RUN apt-get update && apt-get -y install wget curl vim && apt-get clean && npm install -g bower
-[...]
-Creating s1 ... done
-Creating s2 ... done
-Creating ha ... done
-```
-
-
-
-You could verify that you have 3 running containers with the following command :
-
-`$ docker ps`
-
-You should see output similar to the following:
-
-```
-CONTAINER ID        IMAGE                                                  COMMAND                  CREATED             STATUS              PORTS                    NAMES
-a37cd48f28f5        teaching-heigvd-ait-2019-labo-load-balancing_webapp2   "docker-entrypoint.s…"   2 minutes ago       Up About a minute   0.0.0.0:4001->3000/tcp   s2
-8e3384aec724        teaching-heigvd-ait-2019-labo-load-balancing_haproxy   "/docker-entrypoint.…"   2 minutes ago       Up 2 minutes        0.0.0.0:80->80/tcp       ha
-da329f9d1ab6        teaching-heigvd-ait-2019-labo-load-balancing_webapp1   "docker-entrypoint.s…"   2 minutes ago       Up 2 minutes        0.0.0.0:4000->3000/tcp   s1
-```
-
-
-
-You could verify that you have a network bridge who connect the containers :
-
-`$ docker network ls`
-
-
-
-The two web app containers stand for two web servers. They run a
-NodeJS sample application that implements a simple REST API. Each
-container exposes TCP port 3000 to receive HTTP requests.
-
-The HAProxy load balancer is listening on TCP port 80 to receive HTTP
-requests from users. These requests will be forwarded to and
-load-balanced between the web app containers. Additionally it exposes
-TCP ports 1936 and 9999 which we will cover later.
-
-The architecture of our distributed web application is shown in the
-following diagram:
-
-![Architecture](assets/img/archiV2.png)
-
-You can now navigate to the address of the load balancer
-<http://192.168.42.42> in your favorite browser. The load balancer
-forwards your HTTP request to one of the web app containers.
-
-In the case the previous link does not work, you can access the load balancer
-with <http://localhost:80>. If you need to use this address, you will have
-to adapt the laboratory to use this address.
-
-Both containers run the same simple test web app. It is modeled as a
-REST resource. To make this lab more "interesting" the app uses
-sessions. The app is written in Node.js and uses a cookie named
-`NODESESSID`.
-
-The app returns an HTTP response with a JSON payload that is designed
-to help you with testing and debugging. You should see output similar
-to the following:
-
-```json
-{
-  "hello": "world!",
-  "ip": "172.17.0.7",
-  "host": "2b277f0fe8da",
-  "tag": "s1",
-  "sessionViews": 1,
-  "id": "pdoSpuStaotzO4us2l_uYArG0w6S57eV"
-}
-```
-
-The fields have the following meaning:
-
-* The field `ip` contains the internal IP address of the
-  container. This allows you to identify the container, as each
-  receives a different IP address from Docker.
-
-* The field `host` is the hostname of the container and in the Docker
-  context this represents the container ID.
-
-* The `tag` represents the server tag corresponding, in our case, to
-  the container name (docker **--name s1**).
-
-* The field `sessionViews` returns a counter that is a session
-  variable. The counter is incremented each time the app receives a
-  request.  **Hint**: Use this field to observe the session behavior
-  of the load balancer.
-
-* Finally, the field `id` is the session id. You should be able to
-  find that same session id embedded in the session cookie that is
-  sent to the client.
-
-Now it's time to play a bit with what we did until now.
-
-Open JMeter and then open the script `tester.jmx` present in the root
-folder of the project and follow the instructions given in the
-following screenshot (Click on the image and then on RAW button to see the picture in full size. Useful to read the text):
-
-![JMeter](assets/img/jmeter.png)
-
-The JMeter test plan is set up in the following way:
-
-* A Thread Group simulates one user making one hundred GET requests to
-  <http://192.168.42.42/>.
-
-* An HTTP Cookie Manager is active on the Thread Group that will send
-  back in the HTTP request any cookies received in previous responses.
-
-* The server tag is extracted from the HTTP response and used for two
-  counters, CS1 and CS2, that are incremented each time the response
-  came from web app S1 or S2, respectively.
-
-* The Summary Report shows the counters ("S1 reached" / "S2 reached")
-  and the total counts.
 
 
 **Deliverables:**
 
-1. Explain how the load balancer behaves when you open and refresh the
-    URL <http://192.168.42.42> in your browser. Add screenshots to
-    complement your explanations. We expect that you take a deeper a
-    look at session management.
+> 1. Explain how the load balancer behaves when you open and refresh the URL <http://192.168.42.42> in your browser. Add screenshots to complement your explanations. We expect that you take a deeper a look at session management.
 
-2. Explain what should be the correct behavior of the load balancer for
-    session management.
+The load balancer seems to use the **roundrobin** policy. In order to verify this statement, we refresh the URL <http://192.168.42.42> in our browser several times.
 
-3. Provide a sequence diagram to explain what is happening when one
-    requests the URL for the first time and then refreshes the page. We
-    want to see what is happening with the cookie. We want to see the
-    sequence of messages exchanged (1) between the browser and HAProxy
-    and (2) between HAProxy and the nodes S1 and S2. Here is an example:
+Here is the result for the first access.
 
-  ![Sequence diagram for part 1](assets/img/seq-diag-1.png)
+![2](./img/2.png)
 
-4. Provide a screenshot of the summary report from JMeter.
+Then, the second access.
 
-5. Run the following command:
+![3](./img/3.png)
 
-  ```bash
-  $ docker stop s1
-  ```
+As we repeat the process, we can observe the same pattern over and over again. The load balancer alternated between the two servers. 
 
-  Clear the results in JMeter and re-run the test plan. Explain what
-  is happening when only one node remains active. Provide another
-  sequence diagram using the same model as the previous one.
+It is interesting to look at both the `id` fields. They are not the same, suggesting that each server has opened a different session with the client. But there is something worst : the `id` doesn't remain the same, even on the same server.
+
+![4](./img/4.png)
+
+As we can see, the `id` has changed between refreshes on server 1. In conclusion, session management is close to zero.
+
+We can confirm that the reverse proxy uses roundrobin policy by looking at `/ha/config/haproxy.cfg`.
+
+![8](./img/8.png)
+
+> 2. Explain what should be the correct behavior of the load balancer for session management.
+
+The load balancer should use **sticky sessions**. This means that once a server respond to a request with a session id, the load balancer should route the future requests for this particular session to the same server that serviced the first request.
+
+> 3. Provide a sequence diagram to explain what is happening when one requests the URL for the first time and then refreshes the page. We want to see what is happening with the cookie. We want to see the sequence of messages exchanged (1) between the browser and HAProxy and (2) between HAProxy and the nodes S1 and S2. Here is an example:
+>
+> ![Sequence diagram for part 1](assets/img/seq-diag-1.png)
+
+Here is the sequence diagram :
+
+![11](./img/11.png)
+
+> 4. Provide a screenshot of the summary report from JMeter.
+
+As we can see below, on 1000 samples, there is a 50/50 distribution since S1 and S2 have both been reached 500 times.
+
+![1](./img/1.png)
+
+> 5. Run the following command:
+>
+> ```bash
+> $ docker stop s1
+> ```
+>
+> Clear the results in JMeter and re-run the test plan. Explain what is happening when only one node remains active. Provide another sequence diagram using the same model as the previous one.
+
+Here is the result of the test plan run.
+
+![5](./img/5.png)
+
+Now, every GET request reaches S2. This time, the session `id` is correctly reused and the `sessionViews` counter increments correctly.
+
+![6](./img/6.png)
+
+And, after a refresh.
+
+![7](./img/7.png)
+
+Here is the sequence diagram.
+
+![10](./img/10.png)
 
 
 ### Task 2: Sticky sessions
 
-It's time to go further. At this stage, we now have a load balanced
-web application but the session management is totally messed up. In
-this task your job is to fix the configuration of HAProxy to enable
-sticky session management.
-
-For that, you will have to play with docker a little bit more. You
-might want to consult the file [Docker quick reference](Docker quick reference.md) for some
-useful commands and hints.
-
 **Deliverables:**
 
-1. There is different way to implement the sticky session. One possibility is to use the SERVERID provided by HAProxy. Another way is to use the NODESESSID provided by the application. Briefly explain the difference between both approaches (provide a sequence diagram with cookies to show the difference).
+> 1. There is different way to implement the sticky session. One possibility is to use the SERVERID provided by HAProxy. Another way is to use the NODESESSID provided by the application. Briefly explain the difference between both approaches (provide a sequence diagram with cookies to show the difference).
 
-  * Choose one of the both stickiness approach for the next tasks.
+* Using SERVERID :
 
-2. Provide the modified `haproxy.cfg` file with a short explanation of
-    the modifications you did to enable sticky session management.
+This approach consists of configuring the load-balancer to inject a cookie in the client browser. First, we have to add the following line in the configuration file `ha/config/haproxy.cfg` :
 
-3. Explain what is the behavior when you open and refresh the URL
-    <http://192.168.42.42> in your browser. Add screenshots to
-    complement your explanations. We expect that you take a deeper a
-    look at session management.
+```bash
+cookie SERVERID insert
+```
 
-4. Provide a sequence diagram to explain what is happening when one
-    requests the URL for the first time and then refreshes the page. We
-    want to see what is happening with the cookie. We want to see the
-    sequence of messages exchanged (1) between the browser and HAProxy
-    and (2) between HAProxy and the nodes S1 and S2. We also want to see
-    what is happening when a second browser is used.
+It tells HAProxy to setup a cookie called SERVERID only if the user did not come with such cookie.
 
-5. Provide a screenshot of JMeter's summary report. Is there a
-    difference with this run and the run of Task 1?
+Then, we modify the following lines :
+
+```bash
+server s1 ${WEBAPP_1_IP}:3000 cookie cs1 check
+server s2 ${WEBAPP_2_IP}:3000 cookie cs2 check
+```
+
+Here, we added `cookie csX` before `check`. It provides the value of the cookie inserted by HAProxy. When the client comes back, then HAProxy knows directly which server to choose for this client.
+
+![13](./img/13.png)
+
+* Using NODESESSID :
+
+This approach consist of configuring the load-balancer to use the cookie setup by the application server to maintain affinity between the server and a client. We add the following lines in `ha/config/haproxy.cfg` :
+
+```bash
+cookie NODESESSID prefix
+server s1 ${WEBAPP_1_IP}:3000 cookie cs1 check
+server s2 ${WEBAPP_2_IP}:3000 cookie cs2 check
+```
+
+We use the `NODESESSID` since it is a NodeJS application. 
+
+Here, when the server first responds to a client, a `Set-Cookie:NODESESSID=...` is set in the header. When passing through HAProxy, the cookie is modified like this : `Set-Cookie:NODESESSID=cs1~...`.
+
+Then, for its second request, the client will send a request containing : `Cookie:NODESESSID=cs1~...`. Finally, HAProxy will clean it up on the fly to set it up back like the origin : `Cookie:NODESESSID=...` and forward the request to the right server.
+
+![14](./img/14.png)
+
+> Choose one of the both stickiness approach for the next tasks.
+
+> 2. Provide the modified `haproxy.cfg` file with a short explanation of the modifications you did to enable sticky session management.
+
+We chose to use `NODESESSID`. The modifications we did in the configuration file and the explanations can be found in the previous question.
+
+> 3. Explain what is the behavior when you open and refresh the URL
+>    <http://192.168.42.42> in your browser. Add screenshots to
+>    complement your explanations. We expect that you take a deeper a
+>    look at session management.
+
+...
+
+> 4. Provide a sequence diagram to explain what is happening when one
+>    requests the URL for the first time and then refreshes the page. We
+>    want to see what is happening with the cookie. We want to see the
+>    sequence of messages exchanged (1) between the browser and HAProxy
+>    and (2) between HAProxy and the nodes S1 and S2. We also want to see
+>    what is happening when a second browser is used.
+
+...
+
+> 5. Provide a screenshot of JMeter's summary report. Is there a
+>    difference with this run and the run of Task 1?
 
   * Clear the results in JMeter.
 
@@ -445,6 +312,10 @@ $ curl -H "Content-Type: application/json" -X POST -d '{"delay": 1000}' http://<
 
 To reset the delay configuration, just do a `POST` with 0 as the delay
 value.
+
+Prepare your JMeter script with cookies erased (this will simulate new
+clients for each requests) and 10 threads this will simulate 10
+concurrent users.
 
 *Remark*: In general, take a screenshot of the summary report in
  JMeter to explain what is happening.
