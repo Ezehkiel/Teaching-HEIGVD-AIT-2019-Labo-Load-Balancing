@@ -123,24 +123,26 @@ Then, for its second request, the client will send a request containing : `Cooki
 
 We chose to use `NODESESSID`. The modifications we did in the configuration file and the explanations can be found in the previous question.
 
-> 3. Explain what is the behavior when you open and refresh the URL
->    <http://192.168.42.42> in your browser. Add screenshots to
->    complement your explanations. We expect that you take a deeper a
+> 3. Explain what is the behavior when you open and refresh the URL <http://192.168.42.42> in your browser. Add screenshots to complement your explanations. We expect that you take a deeper a
 >    look at session management.
 
+The first time we get on the site, HAProxy simply forwards the request to an available server :
+
+![15](./img/15.png)
+
+As we can see, the request didn't include any cookie. Once the server sends the response with a `Set-Cookie` header, HAProxy intercepts it and modify the cookie by adding `cs2~` before the node session id value.
+
+On a refresh :
+
+![16](./img/16.png)
+
+This time, the client has sent his cookie in the `Cookie` header. We can see that the `cs2~` is still here. Now, and for each of our requests, HAProxy will clean up this addition and send them to server 2. 
+
+> 4. Provide a sequence diagram to explain what is happening when one requests the URL for the first time and then refreshes the page. We want to see what is happening with the cookie. We want to see the sequence of messages exchanged (1) between the browser and HAProxy and (2) between HAProxy and the nodes S1 and S2. We also want to see what is happening when a second browser is used.
+
 ...
 
-> 4. Provide a sequence diagram to explain what is happening when one
->    requests the URL for the first time and then refreshes the page. We
->    want to see what is happening with the cookie. We want to see the
->    sequence of messages exchanged (1) between the browser and HAProxy
->    and (2) between HAProxy and the nodes S1 and S2. We also want to see
->    what is happening when a second browser is used.
-
-...
-
-> 5. Provide a screenshot of JMeter's summary report. Is there a
->    difference with this run and the run of Task 1?
+> 5. Provide a screenshot of JMeter's summary report. Is there a difference with this run and the run of Task 1?
 
   * Clear the results in JMeter.
 
