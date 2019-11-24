@@ -256,28 +256,60 @@ admin stats interface (or also found in the config file).
 
 **Deliverables:**
 
-1. Take a screenshot of the Step 5 and tell us which node is answering.
+> 1. Take a screenshot of the Step 5 and tell us which node is answering.
 
-2. Based on your previous answer, set the node in DRAIN mode. Take a
-    screenshot of the HAProxy state page.
+![30](./img/30.png)
 
-3. Refresh your browser and explain what is happening. Tell us if you
-    stay on the same node or not. If yes, why? If no, why?
+We can see on the zoom that it's the node s1 that is answering. Indeed, under the "Sessions" label we can observe that the column "LbTot" is set to one, this column is a counter of how many time this node was selected. We also have the column "Total" that summerize how many request come to this node.
 
-4. Open another browser and open `http://192.168.42.42`. What is
-    happening?
+![31](./img/31.png)
 
-5. Clear the cookies on the new browser and repeat these two steps
-    multiple times. What is happening? Are you reaching the node in
-    DRAIN mode?
+> 2. Based on your previous answer, set the node in DRAIN mode. Take a
+>    screenshot of the HAProxy state page.
 
-6. Reset the node in READY mode. Repeat the three previous steps and
-    explain what is happening. Provide a screenshot of HAProxy's stats
-    page.
+![33](./img/33.png)
 
-7. Finally, set the node in MAINT mode. Redo the three same steps and
-    explain what is happening. Provide a screenshot of HAProxy's stats
-    page.
+![34](./img/34.png)
+
+> 3. Refresh your browser and explain what is happening. Tell us if you
+>    stay on the same node or not. If yes, why? If no, why?
+
+It's still the same server that is responding. It's because the state "drain" mean that the server will not accept any new connections but connection with a session already establish are still available to go on this node.
+
+![35](./img/35.png)
+
+> 4. Open another browser and open `http://192.168.42.42`. What is
+>    happening?
+
+It's the other node that is answering us.
+
+![36](./img/36.png)
+
+> 5. Clear the cookies on the new browser and repeat these two steps
+>    multiple times. What is happening? Are you reaching the node in
+>    DRAIN mode?
+
+No, it's always the node s2 (the one note in drain state) that is answering us. It's because we are creating new connections, so we are always redirect to the node s2
+
+> 6. Reset the node in READY mode. Repeat the three previous steps and
+>    explain what is happening. Provide a screenshot of HAProxy's stats
+>    page.
+
+The connection that was still on s1 because the session was already set has been redirected to s2 with new session. This could be a problem and cause inconsistent behaviors for the user.
+
+When we create a new connection with an other browser it's the node s1 that is responding us, the roundrobin sticky session policy is functioning again.
+
+![37](./img/37.png)
+
+![38](./img/38.png)
+
+> 7. Finally, set the node in MAINT mode. Redo the three same steps and
+>    explain what is happening. Provide a screenshot of HAProxy's stats
+>    page.
+
+For every connections, new or already setup, it's the node s2 that is answering. So all session that were on s1 are lost.
+
+![39](./img/39.png)
 
 ### Task 4: Round robin in degraded mode.
 
