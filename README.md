@@ -346,20 +346,53 @@ concurrent users.
 
 *Remark*: Make sure you have the cookies are kept between two requests.
 
-1. Be sure the delay is of 0 milliseconds is set on `s1`. Do a run to have base data to compare with the next experiments.
+> 1. Be sure the delay is of 0 milliseconds is set on `s1`. Do a run to have base data to compare with the next experiments.
 
-2. Set a delay of 250 milliseconds on `s1`. Relaunch a run with the
+![40](./img/40.png)
+
+> 2. Set a delay of 250 milliseconds on `s1`. Relaunch a run with the
     JMeter script and explain what it is happening?
 
-3. Set a delay of 2500 milliseconds on `s1`. Same than previous step.
+To set the delay we firstly have to get the IP address of s1. We use `docker inspect -f` (-f mean format) to get the IP directly.
 
-4. In the two previous steps, are there any error? Why?
+```bash
+$ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' s1
+$ curl -H "Content-Type: application/json" -X POST -d '{"delay": 250}' http://192.168.42.11:3000/delay
+```
 
-5. Update the HAProxy configuration to add a weight to your nodes. For
+The test take more time to run, because each request take at least 250 ms to respond. We can see that on the report below. Indeed we can see that the average time to respond is 253 ms for the request `GET /`. The test takes 04:53 minutes to run entirely.
+
+![41](./img/41.png)
+
+> 3. Set a delay of 2500 milliseconds on `s1`. Same than previous step.
+
+![42](./img/42.png)
+
+We can see below that HAProxy has detected that S1 was too slow to respond so he automatically switched S1 as a down node and redirect traffic to S2 that is much faster to respond.
+
+![43](./img/43.png)
+
+![44](./img/44.png)
+
+> 4. In the two previous steps, are there any error? Why?
+
+We have no error because HAProxy detected himself that S1 was not healthy. So he put the node S1 in down state before any request join the node.
+
+> 5. Update the HAProxy configuration to add a weight to your nodes. For
     that, add `weight [1-256]` where the value of weight is between the
     two values (inclusive). Set `s1` to 2 and `s2` to 1. Redo a run with 250ms delay.
 
-6. Now, what happened when the cookies are cleared between each requests and the delay is set to 250ms ? We expect just one or two sentence to summarize your observations of the behavior with/without cookies.
+5 threads
+
+![45](./img/45.png)
+
+> 6. Now, what happened when the cookies are cleared between each requests and the delay is set to 250ms ? We expect just one or two sentence to summarize your observations of the behavior with/without cookies.
+
+5 thread clear cookies
+
+![46](./img/46.png)
+
+
 
 ### Task 5: Balancing strategies
 
