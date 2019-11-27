@@ -43,7 +43,7 @@ Here is the sequence diagram :
 
 > 4. Provide a screenshot of the summary report from JMeter.
 
-As we can see below, on 1000 samples, there is a 50/50 distribution since S1 and S2 have both been reached 500 times.
+As we can see below, on 1000 samples, there is a 50/50 distribution since S1 and S2 have both been reached 500 times by the same thread.
 
 ![1](./img/1.png)
 
@@ -123,35 +123,34 @@ Then, for its second request, the client will send a request containing : `Cooki
 
 We chose to use `NODESESSID`. The modifications we did in the configuration file and the explanations can be found in the previous question.
 
-> 3. Explain what is the behavior when you open and refresh the URL
->    <http://192.168.42.42> in your browser. Add screenshots to
->    complement your explanations. We expect that you take a deeper a
+> 3. Explain what is the behavior when you open and refresh the URL <http://192.168.42.42> in your browser. Add screenshots to complement your explanations. We expect that you take a deeper a
 >    look at session management.
 
-...
+The first time we get on the site, HAProxy simply forwards the request to an available server :
 
-> 4. Provide a sequence diagram to explain what is happening when one
->    requests the URL for the first time and then refreshes the page. We
->    want to see what is happening with the cookie. We want to see the
->    sequence of messages exchanged (1) between the browser and HAProxy
->    and (2) between HAProxy and the nodes S1 and S2. We also want to see
->    what is happening when a second browser is used.
+![15](./img/15.png)
 
-...
+As we can see, the request didn't include any cookie. Once the server sends the response with a `Set-Cookie` header, HAProxy intercepts it and modify the cookie by adding `cs2~` before the node session id value.
 
-> 5. Provide a screenshot of JMeter's summary report. Is there a
->    difference with this run and the run of Task 1?
+On a refresh :
 
-  * Clear the results in JMeter.
+![16](./img/16.png)
 
-  * Now, update the JMeter script. Go in the HTTP Cookie Manager and
-    <del>uncheck</del><ins>verify that</ins> the box `Clear cookies each iteration?`
-    <ins>is unchecked</ins>.
+This time, the client has sent his cookie in the `Cookie` header. We can see that the `cs2~` is still here. Now, and for each of our requests, HAProxy will clean up this addition and send them to server 2. 
 
-  * Go in `Thread Group` and update the `Number of threads`. Set the value to 2.
+> 4. Provide a sequence diagram to explain what is happening when one requests the URL for the first time and then refreshes the page. We want to see what is happening with the cookie. We want to see the sequence of messages exchanged (1) between the browser and HAProxy and (2) between HAProxy and the nodes S1 and S2. We also want to see what is happening when a second browser is used.
 
-7. Provide a screenshot of JMeter's summary report. Give a short
-    explanation of what the load balancer is doing.
+
+
+> 5. Provide a screenshot of JMeter's summary report. Is there a difference with this run and the run of Task 1? Give a short explanation of what the load balancer is doing.
+
+This time, there is two threads accessing the page.
+
+![17](./img/17.png)
+
+We see that the roundrobin policy with sticky session works well. On 2000 samples, s1 has been reached 1000 times by thread1, and s2 has been reached 1000 times by thread2. On contrary to the run of Task 1, where only one thread was accessing the two servers.
+
+The load balancer did the following : when thread1 requested the page, it sent the job to s1, which generated a cookie for thread1. Then, thread2 requested the page and the job was given to s2, which generated a cookie for thread2.
 
 
 ### Task 3: Drain mode
@@ -258,54 +257,45 @@ admin stats interface (or also found in the config file).
 
 ![30](./img/30.png)
 
-We can see on the zoom that it's the node s1 that is answering. Indeed, under the "Sessions" label we can observe that the column "LbTot" is set to one, this column is a counter of how many time this node was selected. We also have the column "Total" that summerize how many request come to this node.
+We can see that node s1 is answering. Under "Sessions" label, we can observe that the column "LbTot" is set to `1`. This column is a counter of how many times this node was selected. There is also the "Total" column that summarizes how many requests came to this node.
 
 ![31](./img/31.png)
 
-> 2. Based on your previous answer, set the node in DRAIN mode. Take a
->    screenshot of the HAProxy state page.
+> 2. Based on your previous answer, set the node in DRAIN mode. Take a screenshot of the HAProxy state page.
 
 ![33](./img/33.png)
 
 ![34](./img/34.png)
 
-> 3. Refresh your browser and explain what is happening. Tell us if you
->    stay on the same node or not. If yes, why? If no, why?
+> 3. Refresh your browser and explain what is happening. Tell us if you stay on the same node or not. If yes, why? If no, why?
 
-It's still the same server that is responding. It's because the state "drain" mean that the server will not accept any new connections but connection with a session already establish are still available to go on this node.
+It is still the same server that is responding. That is because the DRAIN state means that the server will not accept any new connections, but connection with a session already established are still available to go on this node.
 
 ![35](./img/35.png)
 
-> 4. Open another browser and open `http://192.168.42.42`. What is
->    happening?
+> 4. Open another browser and open `http://192.168.42.42`. What is happening?
 
-It's the other node that is answering us.
+The other node is answering us.
 
 ![36](./img/36.png)
 
-> 5. Clear the cookies on the new browser and repeat these two steps
->    multiple times. What is happening? Are you reaching the node in
->    DRAIN mode?
+> 5. Clear the cookies on the new browser and repeat these two steps multiple times. What is happening? Are you reaching the node in DRAIN mode?
 
-No, it's always the node s2 (the one note in drain state) that is answering us. It's because we are creating new connections, so we are always redirect to the node s2
+It is always the node s2 (the one not in drain state) that is answering us. It is because we are creating new connections, so we are always redirected to the node s2.
 
-> 6. Reset the node in READY mode. Repeat the three previous steps and
->    explain what is happening. Provide a screenshot of HAProxy's stats
->    page.
+> 6. Reset the node in READY mode. Repeat the three previous steps and explain what is happening. Provide a screenshot of HAProxy's stats page.
 
-The connection that was still on s1 because the session was already set has been redirected to s2 with new session. This could be a problem and cause inconsistent behaviors for the user.
+The connection that was still on s1, because the session was already set, has been redirected to s2 with a new session. This could be a problem and could cause inconsistent behaviors for the user.
 
-When we create a new connection with an other browser it's the node s1 that is responding us, the roundrobin sticky session policy is functioning again.
+When we create a new connection with an other browser, it is the node s1 that is responding us. The roundrobin sticky session policy is functioning again.
 
 ![37](./img/37.png)
 
 ![38](./img/38.png)
 
-> 7. Finally, set the node in MAINT mode. Redo the three same steps and
->    explain what is happening. Provide a screenshot of HAProxy's stats
->    page.
+> 7. Finally, set the node in MAINT mode. Redo the three same steps and explain what is happening. Provide a screenshot of HAProxy's stats page.
 
-For every connections, new or already setup, it's the node s2 that is answering. So all session that were on s1 are lost.
+For every connections, new or already setup, it is the node s2 that is answering. This means that all sessions that were on s1 are lost.
 
 ![39](./img/39.png)
 
@@ -373,60 +363,55 @@ concurrent users.
 
 ### Task 5: Balancing strategies
 
-In this part of the lab, you will be less guided and you will have more opportunity to play and discover HAProxy. The main goal of this part is to play with various strategies and compare them together.
-
-We propose that you take the time to discover the different strategies in [HAProxy documentation](http://cbonte.github.io/haproxy-dconv/configuration-1.6.html#balance) and then pick two of them (can be round-robin but will be better to chose two others). Once you have chosen your strategies, you have to play with them (change configuration, use Jmeter script, do some experiments).
-
 **Deliverables:**
 
-1. Briefly explain the strategies you have chosen and why you have chosen them.
+> 1. Briefly explain the strategies you have chosen and why you have chosen them.
 
-2. Provide evidences that you have played with the two strategies (configuration done, screenshots, ...)
+The first algorithm we decided to choose is `leastconn`, which will forward requests to the server with the lowest number of connections. We made this choice because this strategy is not recommended when we use short sessions such as HTTP, and we were curious about the results.
 
-3. Compare the both strategies and conclude which is the best for this lab (not necessary the best at all).
+We also chose `first` algorithm, which will forward requests to the first server with available connection slots, and move to another server only once the actual one reaches its max connections value. This strategy is interesting because we have to play with the `maxconn` parameter.
+
+> 2. Provide evidences that you have played with the two strategies (configuration done, screenshots, ...)
+
+**Leastconn strategy :**
+
+First, we replaced `balance roundrobin` by `balance leastconn` in the configuration file. 
+
+To test this strategy, we launched several JMeter tests with multiple threads. In these tests, cookies were cleared on each 1000 iterations.
+
+![21](./img/21.png)
+
+As we can see, in this first test with 20 threads, S2 has been reached more times than S1. Here, we work with very short sessions, and it seems that S2 sessions were globally shorter than the ones on S1. Since S2 has been "free" more times than S1, the load balancer has redirected more requests to it.
+
+The same test with 10 threads shows that this behavior repeats itself, this time with S1 receiving more requests.
+
+![20](./img/20.png)
+
+**First strategy :**
+
+First, we replaced `balance leastconn` by `balance first` in the configuration file. Also, we modified the servers' configuration by adding a `maxconn` parameter :
+
+```bash
+    server s1 ${WEBAPP_1_IP}:3000 cookie cs1 check maxconn 10
+    server s2 ${WEBAPP_2_IP}:3000 cookie cs2 check maxconn 10
+```
+
+To test this strategy, we launched 2 JMeter tests with respectively 10 and 11 threads. There were still 1000 iterations and cookies were reused.
+
+![23](./img/23.png)
+
+![22](./img/22.png)
+
+As we expected, the first run didn't even involve S2. That is because S1 has treated all requests, since it could accept 10 threads. On the second run, once S1 reached its connection limit, the 11th request has been sent to S2.
+
+> 3. Compare the both strategies and conclude which is the best for this lab (not necessary the best at all).
+
+The `leastconn` strategy resembles the `roundrobin` one. For both, there is a "balance" between servers. Moreover, `leastconn` includes a `roundrobin` strategy within groups of servers of the same load. However, `leastconn` works well with long sessions, so it is not very well suited for this lab. On the other side, `first` strategy can excloffude totally or partially a server from being used.
+
+Since we don't feel the need to "save" power by shutting down a server (it is only a container), we think that `leastconn` is a better strategy for this lab.
 
 #### References
 
 * [HAProxy Socket commands (drain, ready, ...)](https://cbonte.github.io/haproxy-dconv/configuration-1.5.html#9.2-set%20server)
 * [Socat util to run socket commands](http://www.dest-unreach.org/socat/)
 * [Socat command examples](https://stuff.mit.edu/afs/sipb/machine/penguin-lust/src/socat-1.7.1.2/EXAMPLES)
-
-#### Lab due date
-
-Deliver your results at the latest 15 minutes before class Wednesday, November 25.
-
-#### Windows troubleshooting
-
-git It appears that Windows users can encounter a `CRLF` vs. `LF` problem when the repos is cloned without taking care of the ending lines. Therefore, if the ending lines are `CRFL`, it will produce an error message with Docker:
-
-```bash
-... no such file or directory
-```
-
-(Take a look to this Docker issue: https://github.com/docker/docker/issues/9066, the last post show the error message).
-
-The error message is not really relevant and difficult to troubleshoot. It seems the problem is caused by the line endings not correctly interpreted by Linux when they are `CRLF` in place of `LF`. The problem is caused by cloning the repos on Windows with a system that will not keep the `LF` in the files.
-
-Fortunatelly, there is a procedure to fix the `CRLF` to `LF` and then be sure Docker will recognize the `*.sh` files.
-
-First, you need to add the file `.gitattributes` file with the following content:
-
-```bash
-* text eol=lf
-```
-
-This will ask the repos to force the ending lines to `LF` for every text files.
-
-Then, you need to reset your repository. Be sure you do not have **modified** files.
-
-```bash
-# Erease all the files in your local repository
-git rm --cached -r .
-
-# Restore the files from your local repository and apply the correct ending lines (LF)
-git reset --hard
-```
-
-Then, you are ready to go.
-
-There is a link to deeper explanation and procedure about the ending lines written by GitHub: https://help.github.com/articles/dealing-with-line-endings/
