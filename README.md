@@ -1,7 +1,10 @@
-Lab 03 - Load balancing
+# Lab 03 - Load balancing
+
+Authors : Caroline Monthoux, Rémi Poulard
+
+Date : 27.11.2019
 
 ### Task 1: Install the tools
-
 
 **Deliverables:**
 
@@ -31,11 +34,10 @@ We can confirm that the reverse proxy uses roundrobin policy by looking at `/ha/
 
 > 2. Explain what should be the correct behavior of the load balancer for session management.
 
-The load balancer should use **sticky sessions**. This means that once a server respond to a request with a session id, the load balancer should route the future requests for this particular session to the same server that serviced the first request.
+The load balancer should use **sticky sessions**. This means that once a server responds to a request with a session id, the load balancer should route the future requests for this particular session to the same server that serviced the first request.
 
 > 3. Provide a sequence diagram to explain what is happening when one requests the URL for the first time and then refreshes the page. We want to see what is happening with the cookie. We want to see the sequence of messages exchanged (1) between the browser and HAProxy and (2) between HAProxy and the nodes S1 and S2. Here is an example:
 >
-> ![Sequence diagram for part 1](assets/img/seq-diag-1.png)
 
 Here is the sequence diagram :
 
@@ -97,7 +99,7 @@ server s2 ${WEBAPP_2_IP}:3000 cookie cs2 check
 
 Here, we added `cookie csX` before `check`. It provides the value of the cookie inserted by HAProxy. When the client comes back, then HAProxy knows directly which server to choose for this client.
 
-![13](./img/13.png)
+![14](./img/14.png)
 
 * Using NODESESSID :
 
@@ -115,7 +117,7 @@ Here, when the server first responds to a client, a `Set-Cookie:NODESESSID=...` 
 
 Then, for its second request, the client will send a request containing : `Cookie:NODESESSID=cs1~...`. Finally, HAProxy will clean it up on the fly to set it up back like the origin : `Cookie:NODESESSID=...` and forward the request to the right server.
 
-![14](./img/14.png)
+![13](./img/13.png)
 
 > Choose one of the both stickiness approach for the next tasks.
 
@@ -123,8 +125,7 @@ Then, for its second request, the client will send a request containing : `Cooki
 
 We chose to use `NODESESSID`. The modifications we did in the configuration file and the explanations can be found in the previous question.
 
-> 3. Explain what is the behavior when you open and refresh the URL <http://192.168.42.42> in your browser. Add screenshots to complement your explanations. We expect that you take a deeper a
->    look at session management.
+> 3. Explain what is the behavior when you open and refresh the URL <http://192.168.42.42> in your browser. Add screenshots to complement your explanations. We expect that you take a deeper look at session management.
 
 The first time we get on the site, HAProxy simply forwards the request to an available server :
 
@@ -140,7 +141,7 @@ This time, the client has sent his cookie in the `Cookie` header. We can see tha
 
 > 4. Provide a sequence diagram to explain what is happening when one requests the URL for the first time and then refreshes the page. We want to see what is happening with the cookie. We want to see the sequence of messages exchanged (1) between the browser and HAProxy and (2) between HAProxy and the nodes S1 and S2. We also want to see what is happening when a second browser is used.
 
-
+![13](./img/13.png)
 
 > 5. Provide a screenshot of JMeter's summary report. Is there a difference with this run and the run of Task 1? Give a short explanation of what the load balancer is doing.
 
@@ -148,108 +149,12 @@ This time, there is two threads accessing the page.
 
 ![17](./img/17.png)
 
-We see that the roundrobin policy with sticky session works well. On 2000 samples, s1 has been reached 1000 times by thread1, and s2 has been reached 1000 times by thread2. On contrary to the run of Task 1, where only one thread was accessing the two servers.
+We see that the roundrobin policy with sticky session works well. On 2000 samples, S1 has been reached 1000 times by thread1, and S2 has been reached 1000 times by thread2. On contrary to the run of Task 1, where only one thread was accessing the two servers.
 
-The load balancer did the following : when thread1 requested the page, it sent the job to s1, which generated a cookie for thread1. Then, thread2 requested the page and the job was given to s2, which generated a cookie for thread2.
+The load balancer did the following : when thread1 requested the page, it sent the job to S1, which generated a cookie for thread1. Then, thread2 requested the page and the job was given to S2, which generated a cookie for thread2.
 
 
 ### Task 3: Drain mode
-
-HAProxy provides a mode where we can set a node to DRAIN state. In
-this case, HAProxy will let _current_ sessions continue to make
-requests to the node in DRAIN mode and will redirect all other traffic
-to the other nodes.
-
-In our case, it means that if we put `s1` in DRAIN mode, all new
-traffic will reach the `s2` node and all current traffic directed to
-`s1` will continue to communicate with `s1`.
-
-Another mode is MAINT mode which is more intrusive than DRAIN. In this
-mode, all current and new traffic is redirected to the other active
-nodes even if there are active sessions.
-
-In this task, we will experiment with these two modes. We will base
-our next steps on the work done on Task 2. We expect you have a
-working Sticky Session configuration with two web app nodes up and
-running called `s1` and `s2`.
-
-When all the infra is up and running, perform the following steps:
-
-1. Open a browser on your host
-
-2. Navigate to `http://192.168.42.42`. You will reach one of the two
-   nodes. Let's assume it is `s1` but in your case, it could be `s2`
-   as the balancing strategy is roundrobin.
-
-3. Refresh the page. You should get the same result except that the
-   views counter is incremented.
-
-4. Refresh multiple times the page and verify that you continue to
-   reach the same node and see the sessionViews counter increased.
-
-5. In a different tab, open `http://192.168.42.42:1936` and take a
-   look. You should have something similar to the following
-   screenshot.
-
-![Admin Stat view of HAProxy](assets/img/stats.png)
-
-  You should be able to see the `s1` and `s2` nodes and their state.
-
-For the next operations, you will use HAProxy's built-in command line
-to query its status and send commands to it. HAProxy provides the
-command line via a TCP socket so that a system administrator is able
-to connect to it when HAProxy runs on a remote server. You will use
-`socat` to connect to the TCP socket. `socat` is a universal
-command-line tool to connect pretty much anything with anything. You may need to install it
-
-To use it type the following:
-
-```bash
-$ socat - tcp:192.168.42.42:9999
-prompt
-
-> help
-Unknown command. Please enter one of the following commands only :
-  clear counters : clear max statistics counters (add 'all' for all counters)
-  clear table    : remove an entry from a table
-  help           : this message
-  prompt         : toggle interactive mode with prompt
-  quit           : disconnect
-  show info      : report information about the running process
-[...]
-```
-
-After typing `socat - tcp:localhost:9999` and pressing enter you will
-see... nothing. You are connected to HAProxy, but it remains silent
-for the time being. You have to turn on the prompt by typing
-`prompt`. You will see a new line starting with `>`. Now you can enter
-commands that will be directly interpreted by HAProxy.
-
-First, increase the client timeout to avoid losing connections.
-
-```bash
-> set timeout cli 1d
-```
-
-Now, to set a node's state to `ready`, `maint` or `drain`, enter the
-following command:
-
-```bash
-> set server nodes/<containerName> state <state>
-```
-
-**Note:** In fact, the `nodes` is the group of backend nodes
-  labelled. You will find the corresponding `backend nodes` in ha
-  config.
-
-**Note 2:** The containerName is the label of the node. In fact, in
-this lab, we used the same name as Docker container names but both
-names are not linked together. We can choose different names if we
-want. The name set in this command is the name present in the HAProxy
-admin stats interface (or also found in the config file).
-
-**Note 3:** We will use only the three states presented there. Take
-  care that the command only accept lower cases states.
 
 **Deliverables:**
 
@@ -257,7 +162,7 @@ admin stats interface (or also found in the config file).
 
 ![30](./img/30.png)
 
-We can see that node s1 is answering. Under "Sessions" label, we can observe that the column "LbTot" is set to `1`. This column is a counter of how many times this node was selected. There is also the "Total" column that summarizes how many requests came to this node.
+We can see that node S1 is answering. Under `Sessions` label, we can observe that the column `LbTot` is set to `1`. This column is a counter of how many times this node was selected. There is also the `Total` column that summarizes how many requests came to this node.
 
 ![31](./img/31.png)
 
@@ -275,19 +180,19 @@ It is still the same server that is responding. That is because the DRAIN state 
 
 > 4. Open another browser and open `http://192.168.42.42`. What is happening?
 
-The other node is answering us.
+This time, it is the other node that is answering us.
 
 ![36](./img/36.png)
 
 > 5. Clear the cookies on the new browser and repeat these two steps multiple times. What is happening? Are you reaching the node in DRAIN mode?
 
-It is always the node s2 (the one not in drain state) that is answering us. It is because we are creating new connections, so we are always redirected to the node s2.
+It is always the node S2 (the one not in DRAIN state) that is answering us. It is because we are creating new connections, so we are always redirected to the node S2.
 
 > 6. Reset the node in READY mode. Repeat the three previous steps and explain what is happening. Provide a screenshot of HAProxy's stats page.
 
-The connection that was still on s1, because the session was already set, has been redirected to s2 with a new session. This could be a problem and could cause inconsistent behaviors for the user.
+The connection that was still on S1, because the session was already set, has been redirected to S2 with a new session. This could be a problem and could cause inconsistent behaviors for the user.
 
-When we create a new connection with an other browser, it is the node s1 that is responding us. The roundrobin sticky session policy is functioning again.
+When we create a new connection with an other browser, it is the node S1 that is responding us. The roundrobin sticky session policy is functioning again.
 
 ![37](./img/37.png)
 
@@ -295,52 +200,11 @@ When we create a new connection with an other browser, it is the node s1 that is
 
 > 7. Finally, set the node in MAINT mode. Redo the three same steps and explain what is happening. Provide a screenshot of HAProxy's stats page.
 
-For every connections, new or already setup, it is the node s2 that is answering. This means that all sessions that were on s1 are lost.
+For every connections, new or already setup, it is the node S2 that is answering. This means that all sessions that were on S1 are lost.
 
 ![39](./img/39.png)
 
 ### Task 4: Round robin in degraded mode.
-
-In this part, we will try to simulate a degraded mode based on the round-robin previously configured.
-
-To help experimenting the balancing when an application started to behave strangely, the web application
-has a REST resource to configure a delay in the response. You can set
-an arbitrary delay in milliseconds. Once the delay is configured, the
-response will take the amount of time configured.
-
-To set the timeout, you have to do a `POST` request with the following
-content (be sure the `Content-Type` header is set to
-`application/json`. The configuration is applicable on each
-node. Therefore, you can do one `POST` request on
-`http://192.168.42.42/delay` and taking a look at the response cookies
-will tell you which node has been configured.
-
-```json
-{
-  "delay": 1000
-}
-```
-
-The previous example will set a delay of 1 second.
-
-Or retrieve the IP of the container you want to
-configure and then do the `curl` command to configure the delay.
-
-```bash
-$ docker inspect <containerName>
-
-$ curl -H "Content-Type: application/json" -X POST -d '{"delay": 1000}' http://<containerIp>:3000/delay
-```
-
-To reset the delay configuration, just do a `POST` with 0 as the delay
-value.
-
-Prepare your JMeter script with cookies erased (this will simulate new
-clients for each requests) and 10 threads this will simulate 10
-concurrent users.
-
-*Remark*: In general, take a screenshot of the summary report in
- JMeter to explain what is happening.
 
 **Deliverables:**
 
@@ -350,25 +214,26 @@ concurrent users.
 
 ![40](./img/40.png)
 
-> 2. Set a delay of 250 milliseconds on `s1`. Relaunch a run with the
-    JMeter script and explain what it is happening?
+> 2. Set a delay of 250 milliseconds on `s1`. Relaunch a run with the JMeter script and explain what it is happening?
 
-To set the delay we firstly have to get the IP address of s1. We use `docker inspect -f` (-f mean format) to get the IP directly.
+First, to set the delay, we have to get the IP address of S1. We use `docker inspect -f` (`-f` means `format`) to get the IP directly.
 
 ```bash
 $ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' s1
 $ curl -H "Content-Type: application/json" -X POST -d '{"delay": 250}' http://192.168.42.11:3000/delay
 ```
 
-The test take more time to run, because each request take at least 250 ms to respond. We can see that on the report below. Indeed we can see that the average time to respond is 253 ms for the request `GET /`. The test takes 04:53 minutes to run entirely.
+The test takes more time to run, because each request take at least 250 ms to get a response. We can see that on the image below.
 
 ![41](./img/41.png)
+
+We can see that the average time to get a response is 253 ms for the request `GET /`. The test took almost 5 minutes (04:53) to run entirely.
 
 > 3. Set a delay of 2500 milliseconds on `s1`. Same than previous step.
 
 ![42](./img/42.png)
 
-We can see below that HAProxy has detected that S1 was too slow to respond so he automatically switched S1 as a down node and redirect traffic to S2 that is much faster to respond.
+This time, HAProxy has detected that S1 was too slow to respond, so he automatically switched S1 as a DOWN node and redirected traffic to S2, which is much faster to respond.
 
 ![43](./img/43.png)
 
@@ -376,23 +241,34 @@ We can see below that HAProxy has detected that S1 was too slow to respond so he
 
 > 4. In the two previous steps, are there any error? Why?
 
-We have no error because HAProxy detected himself that S1 was not healthy. So he put the node S1 in down state before any request join the node.
+There were no errors. Because HAProxy detected that S1 was not healthy, he temporary put this node in DOWN state and stopped sending it requests.
 
-> 5. Update the HAProxy configuration to add a weight to your nodes. For
-    that, add `weight [1-256]` where the value of weight is between the
-    two values (inclusive). Set `s1` to 2 and `s2` to 1. Redo a run with 250ms delay.
+> 5. Update the HAProxy configuration to add a weight to your nodes. For that, add `weight [1-256]` where the value of weight is between the two values (inclusive). Set `s1` to 2 and `s2` to 1. Redo a run with 250ms delay.
 
-5 threads
+First, we modified the configuration file like this :
+
+```bash
+server s1 ${WEBAPP_1_IP}:3000 cookie cs1 check weight 2
+server s2 ${WEBAPP_2_IP}:3000 cookie cs2 check weight 1
+```
+
+Here, the key element is that the higher the weight, the higher the load on the servers. The load is proportional to their weight, relative to the sum of all weights.
+
+To test it, we launched a JUnit test with 5 threads. Cookies were reused through the 1000 iterations. 
 
 ![45](./img/45.png)
 
+This screenshot has been taken during the test. Since the sum of all weights is 3, S1 is supposed to received 2/3 of the load and S2 only 1/3. Here, S2 have already been reached its maximum number of times (1000 * 2 threads), and S1 is still receiving requests because it has a delay for each one of them. 
+
+That is possible thanks to the use of cookies : once the requests have been correctly dispatched using the weights, cookies are delivered by S1 and S2. From there, the threads linked to S2 can make their requests without waiting for S1. 
+
 > 6. Now, what happened when the cookies are cleared between each requests and the delay is set to 250ms ? We expect just one or two sentence to summarize your observations of the behavior with/without cookies.
 
-5 thread clear cookies
+We did the same as previously (5 threads, 1000 iterations), but with cookies cleared between each request.
 
 ![46](./img/46.png)
 
-
+Without cookies, the load balancer can not quickly dispatch requests to S2. As a matter of fact, the use of weights forces HAProxy to send 2/3 requests to S1, even if the server experiences a high latency. In other words, S2 must wait on S1 to get its requests. As a result, this test lasted much longer than the first run.
 
 ### Task 5: Balancing strategies
 
@@ -439,7 +315,7 @@ As we expected, the first run didn't even involve S2. That is because S1 has tre
 
 > 3. Compare the both strategies and conclude which is the best for this lab (not necessary the best at all).
 
-The `leastconn` strategy resembles the `roundrobin` one. For both, there is a "balance" between servers. Moreover, `leastconn` includes a `roundrobin` strategy within groups of servers of the same load. However, `leastconn` works well with long sessions, so it is not very well suited for this lab. On the other side, `first` strategy can excloffude totally or partially a server from being used.
+The `leastconn` strategy resembles the `roundrobin` one. For both, there is a "balance" between servers. Moreover, `leastconn` includes a `roundrobin` strategy within groups of servers of the same load. However, `leastconn` works well with long sessions, so it is not very well suited for this lab. On the other side, `first` strategy can exclude totally or partially a server from being used.
 
 Since we don't feel the need to "save" power by shutting down a server (it is only a container), we think that `leastconn` is a better strategy for this lab.
 
